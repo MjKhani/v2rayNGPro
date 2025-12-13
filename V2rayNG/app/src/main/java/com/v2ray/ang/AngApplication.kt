@@ -43,5 +43,8 @@ class AngApplication : MultiDexApplication() {
         es.dmoral.toasty.Toasty.Config.getInstance()
             .setGravity(android.view.Gravity.BOTTOM, 0, 200)
             .apply()
+
+        // -------------------- Auto Update Setup --------------------
+        AppConfig.setupAutoUpdate(this)
     }
 }
