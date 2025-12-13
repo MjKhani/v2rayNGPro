@@ -119,17 +119,17 @@ jobs:
         fileName: "android_keystore.jks"
         encodedString: ${{ secrets.APP_KEYSTORE_BASE64 }}
 
-    # 🔴 فقط این Step جدید اضافه شده
+    # 🔴 حذف فایل‌های x86 و x86_64 قبل از ساخت
     - name: Remove x86 and x86_64 from jniLibs
       run: |
         rm -rf V2rayNG/app/src/main/jniLibs/x86
         rm -rf V2rayNG/app/src/main/jniLibs/x86_64
 
     - name: Build APK
+      working-directory: ${{ github.workspace }}/V2rayNG
       run: |
-        cd ${{ github.workspace }}/V2rayNG
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
-        chmod 755 gradlew
+        chmod +x gradlew
         ./gradlew licenseFdroidReleaseReport
         ./gradlew assembleRelease \
           -Pandroid.injected.signing.store.file=${{ steps.android_keystore.outputs.filePath }} \
