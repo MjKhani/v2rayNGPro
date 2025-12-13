@@ -1,5 +1,11 @@
 package com.v2ray.ang
 
+import android.content.Context
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.ExistingPeriodicWorkPolicy
+import com.v2ray.ang.handler.SubscriptionUpdater
+import java.util.concurrent.TimeUnit
 
 object AppConfig {
 
@@ -112,7 +118,6 @@ object AppConfig {
     const val TG_CHANNEL_URL = "https://t.me/github_2dust"
     const val DELAY_TEST_URL = "https://www.gstatic.com/generate_204"
     const val DELAY_TEST_URL2 = "https://www.google.com/generate_204"
-//    const val IP_API_URL = "https://speed.cloudflare.com/meta"
     const val IP_API_URL = "https://api.ip.sb/geoip"
 
     /** DNS server addresses. */
@@ -256,5 +261,23 @@ object AppConfig {
         "runetfreedom/russia-v2ray-rules-dat",
         "Chocolate4U/Iran-v2ray-rules"
     )
+
+    /** -------------------- Auto Update Setup -------------------- **/
+    fun setupAutoUpdate(context: Context) {
+        val prefs = context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+        val isAutoUpdateEnabled = prefs.getBoolean(SUBSCRIPTION_AUTO_UPDATE, true)
+
+        if (isAutoUpdateEnabled) {
+            val workRequest = PeriodicWorkRequestBuilder<SubscriptionUpdater.UpdateTask>(
+                SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL.toLong(), TimeUnit.MINUTES
+            ).build()
+
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                SUBSCRIPTION_UPDATE_TASK_NAME,
+                ExistingPeriodicWorkPolicy.REPLACE,
+                workRequest
+            )
+        }
+    }
 
 }
