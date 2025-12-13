@@ -12,7 +12,7 @@ data class SubscriptionItem(
     var nextProfile: String? = null,
     var filter: String? = null,
     var intelligentSelectionFilter: String? = null,
-    var allowInsecureUrl: Boolean = false,
+    var allowInsecureUrl: Boolean = true,
     var userAgent: String? = null,
 )
 
