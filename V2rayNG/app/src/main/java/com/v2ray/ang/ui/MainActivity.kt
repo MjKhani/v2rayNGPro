@@ -211,7 +211,8 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 val interval = MmkvManager.decodeSettingsString(
                     AppConfig.SUBSCRIPTION_AUTO_UPDATE_INTERVAL,
                     AppConfig.SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL
-                ).toLongEx()
+                )
+                val interval = intervalStr?.toLongOrNull() ?: AppConfig.SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL.toLong()
                 
                 // فقط اگر interval معتبر است task را تنظیم کن
                 if (interval >= 15) {
