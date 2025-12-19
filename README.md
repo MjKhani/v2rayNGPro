@@ -1,32 +1,239 @@
-# v2rayNG
+# v2rayNG Pro 🚀
 
-A V2Ray client for Android, support [Xray core](https://github.com/XTLS/Xray-core) and [v2fly core](https://github.com/v2fly/v2ray-core)
+<div align="center">
 
-[![API](https://img.shields.io/badge/API-21%2B-yellow.svg?style=flat)](https://developer.android.com/about/versions/lollipop)
-[![Kotlin Version](https://img.shields.io/badge/Kotlin-2.2.21-blue.svg)](https://kotlinlang.org)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/m/2dust/v2rayNG)](https://github.com/2dust/v2rayNG/commits/master)
-[![CodeFactor](https://www.codefactor.io/repository/github/2dust/v2rayng/badge)](https://www.codefactor.io/repository/github/2dust/v2rayng)
-[![GitHub Releases](https://img.shields.io/github/downloads/2dust/v2rayNG/latest/total?logo=github)](https://github.com/2dust/v2rayNG/releases)
-[![Chat on Telegram](https://img.shields.io/badge/Chat%20on-Telegram-brightgreen.svg)](https://t.me/v2rayn)
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
+![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)
+![Platform](https://img.shields.io/badge/platform-Android-brightgreen.svg)
 
-### Telegram Channel
-[github_2dust](https://t.me/github_2dust)
+**نسخه پیشرفته v2rayNG با قابلیت آپدیت خودکار**
 
-### Usage
+[دانلود](https://github.com/MjKhani/v2rayNGPro/releases) | [گزارش مشکل](https://github.com/MjKhani/v2rayNGPro/issues)
 
-#### Geoip and Geosite
-- geoip.dat and geosite.dat files are in `Android/data/com.v2ray.ang/files/assets` (path may differ on some Android device)
-- download feature will get enhanced version in this [repo](https://github.com/Loyalsoldier/v2ray-rules-dat) (Note it need a working proxy)
-- latest official [domain list](https://github.com/Loyalsoldier/v2ray-rules-dat) and [ip list](https://github.com/Loyalsoldier/geoip) can be imported manually
-- possible to use third party dat file in the same folder, like [h2y](https://guide.v2fly.org/routing/sitedata.html#%E5%A4%96%E7%BD%AE%E7%9A%84%E5%9F%9F%E5%90%8D%E6%96%87%E4%BB%B6)
+</div>
 
-### More in our [wiki](https://github.com/2dust/v2rayNG/wiki)
+---
 
-### Development guide
+## 📱 درباره پروژه
 
-Android project under V2rayNG folder can be compiled directly in Android Studio, or using Gradle wrapper. But the v2ray core inside the aar is (probably) outdated.  
-The aar can be compiled from the Golang project [AndroidLibV2rayLite](https://github.com/2dust/AndroidLibV2rayLite) or [AndroidLibXrayLite](https://github.com/2dust/AndroidLibXrayLite).
-For a quick start, read guide for [Go Mobile](https://github.com/golang/go/wiki/Mobile) and [Makefiles for Go Developers](https://tutorialedge.net/golang/makefiles-for-go-developers/)
+v2rayNG Pro یک fork از [v2rayNG](https://github.com/2dust/v2rayNG) اصلی با امکانات پیشرفته‌تر است.
 
-v2rayNG can run on Android Emulators. For WSA, VPN permission need to be granted via
-`appops set [package name] ACTIVATE_VPN allow`
+## ✨ امکانات اضافه شده
+
+### 🔄 آپدیت خودکار Subscription
+- ✅ آپدیت اتوماتیک subscription ها در بک‌گراند
+- ✅ قابلیت تنظیم زمان‌بندی (15 دقیقه تا نامحدود)
+- ✅ نوتیفیکیشن هوشمند
+- ✅ مدیریت بهینه WorkManager
+- ✅ کاهش مصرف باتری
+
+## 📥 دانلود
+
+آخرین نسخه را از بخش [Releases](https://github.com/MjKhani/v2rayNGPro/releases) دانلود کنید.
+
+**دو نسخه موجود است:**
+- 📱 **F-Droid** - برای کاربران عمومی
+- 🏪 **Play Store** - نسخه گوگل پلی
+
+## 🚀 نحوه استفاده
+
+### راه‌اندازی Auto-Update
+
+1. باز کردن **Settings**
+2. بخش **Subscription**
+3. فعال کردن گزینه **"Auto Update Subscription"**
+4. تنظیم **"Update Interval"** (پیش‌فرض: 60 دقیقه)
+```
+⚙️ Settings → Subscription → Auto Update ✅
+```
+
+### تنظیمات پیشرفته
+
+- **Minimum Interval**: 15 دقیقه
+- **Recommended**: 60 دقیقه (1 ساعت)
+- **برای ترافیک کم**: 120+ دقیقه
+
+## 🔧 Build کردن
+```bash
+# Clone repository
+git clone https://github.com/MjKhani/v2rayNGPro.git
+cd v2rayNGPro/V2rayNG
+
+# Build
+./gradlew assembleFdroidRelease
+
+# یا برای همه نسخه‌ها
+./gradlew assembleRelease
+```
+
+**پیش‌نیازها:**
+- Android Studio Arctic Fox یا جدیدتر
+- JDK 17+
+- Android SDK 34+
+
+## 📊 مقایسه با نسخه اصلی
+
+| ویژگی | v2rayNG اصلی | v2rayNG Pro |
+|------|-------------|-------------|
+| Auto-Update Sub | ❌ | ✅ |
+| Background Update | ❌ | ✅ |
+| Custom Interval | ❌ | ✅ |
+| Notification | ❌ | ✅ |
+| Battery Optimized | ❌ | ✅ |
+
+## 🐛 گزارش مشکلات
+
+مشکل پیدا کردید؟ لطفاً در بخش [Issues](https://github.com/MjKhani/v2rayNGPro/issues) گزارش دهید.
+
+**قبل از گزارش:**
+- ✅ نسخه Android خود را ذکر کنید
+- ✅ لاگ را ضمیمه کنید
+- ✅ مراحل بازتولید مشکل را شرح دهید
+
+## 🤝 مشارکت
+
+مشارکت‌ها استقبال می‌شود! 
+
+1. Fork کنید
+2. Feature branch بسازید (`git checkout -b feature/amazing`)
+3. Commit کنید (`git commit -m 'Add amazing feature'`)
+4. Push کنید (`git push origin feature/amazing`)
+5. Pull Request باز کنید
+
+## 📝 تغییرات
+
+برای مشاهده تغییرات هر نسخه به [CHANGELOG.md](CHANGELOG.md) مراجعه کنید.
+
+## 📄 License
+
+این پروژه تحت لایسنس GPL-3.0 منتشر شده است - فایل [LICENSE](LICENSE) را ببینید.
+
+## 🙏 تشکر
+
+- [2dust](https://github.com/2dust) برای v2rayNG اصلی
+- تمام Contributors پروژه اصلی
+- کامیونیتی عزیز v2ray
+
+## 📞 ارتباط
+
+- 📧 Email: [ایمیل شما]
+- 💬 Telegram: [لینک تلگرام]
+- 🐦 Twitter: [لینک توییتر]
+
+---
+
+<div align="center">
+
+⭐ اگه پروژه رو دوست داشتی یه Star بزن!
+
+Made with ❤️ by [MjKhani](https://github.com/MjKhani)
+
+</div>
+
+
+# Changelog
+
+همه تغییرات قابل توجه این پروژه در این فایل مستند می‌شود.
+
+## [1.0.0] - 2024-12-XX
+
+### Added ✨
+- قابلیت Auto-Update Subscription
+- تنظیم interval سفارشی (حداقل 15 دقیقه)
+- نوتیفیکیشن برای وضعیت آپدیت
+- مدیریت هوشمند با WorkManager
+
+### Fixed 🐛
+- رفع SecurityException هنگام restart
+- بهبود مدیریت lifecycle
+- رفع مشکل "process is bad"
+
+### Changed 🔄
+- بهینه‌سازی مصرف باتری
+- بهبود error handling
+- اضافه شدن logging کامل
+
+## [Unreleased]
+
+### Planned 🚧
+- نمایش آخرین زمان آپدیت
+- دکمه refresh دستی
+- Statistics و گزارش‌گیری
+
+
+# مشارکت در v2rayNG Pro
+
+ممنون که می‌خواهید مشارکت کنید! 🎉
+
+## چگونه مشارکت کنیم
+
+### گزارش Bug
+
+1. مطمئن شوید bug قبلاً گزارش نشده
+2. Issue جدید با template مناسب باز کنید
+3. اطلاعات کامل بدهید:
+   - نسخه Android
+   - مدل گوشی
+   - لاگ کامل
+   - مراحل بازتولید
+
+### پیشنهاد Feature
+
+1. Issue جدید باز کنید
+2. Feature را به طور کامل توضیح دهید
+3. مزایا و موارد استفاده را ذکر کنید
+
+### Pull Request
+
+1. Fork کنید
+2. Branch جدید بسازید
+3. تغییرات را commit کنید
+4. تست کنید
+5. PR بفرستید
+
+## Code Style
+
+- از Kotlin conventions استفاده کنید
+- Comment های مناسب بنویسید
+- Error handling کامل داشته باشید
+
+
+## 🐛 توضیح Bug
+
+توضیح واضح و مختصر از مشکل
+
+## 📱 محیط
+
+- نسخه اپ: [مثلاً 1.0.0]
+- نسخه Android: [مثلاً 13]
+- مدل گوشی: [مثلاً Pixel 7]
+
+## 🔄 مراحل بازتولید
+
+1. برو به '...'
+2. کلیک کن روی '...'
+3. خطا رخ می‌دهد
+
+## ✅ رفتار مورد انتظار
+
+توضیح دهید چه اتفاقی باید بیفتد
+
+## ❌ رفتار فعلی
+
+توضیح دهید چه اتفاقی می‌افتد
+
+## 📋 لاگ
+```
+لاگ را اینجا paste کنید
+```
+
+## 📸 اسکرین‌شات
+
+اگر مربوط است، اسکرین‌شات اضافه کنید
+```
+
+#### 5. **Topics رو اضافه کن**
+
+تو GitHub صفحه اصلی پروژه، About قسمت → Topics اضافه کن:
+```
+android, vpn, v2ray, proxy, v2rayng, kotlin, auto-update, subscription
