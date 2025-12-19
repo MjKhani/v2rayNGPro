@@ -65,14 +65,20 @@ class AngApplication : MultiDexApplication() {
             )
             
             if (autoUpdateEnabled) {
-                val interval = MmkvManager.decodeSettingsString(
+                val intervalStr = MmkvManager.decodeSettingsString(
                     AppConfig.SUBSCRIPTION_AUTO_UPDATE_INTERVAL,
                     AppConfig.SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL
                 )
-                val interval = intervalStr?.toLongOrNull() ?: AppConfig.SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL.toLong()
+                
+                // تبدیل به عدد
+                val intervalMinutes = try {
+                    intervalStr?.toLong() ?: AppConfig.SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL.toLong()
+                } catch (e: Exception) {
+                    AppConfig.SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL.toLong()
+                }
                 
                 // فقط اگر interval معتبر است task را تنظیم کن
-                if (interval >= 15) {
+                if (intervalMinutes >= 15) {
                     // استفاده از RemoteWorkManager برای تنظیم task
                     val rw = androidx.work.multiprocess.RemoteWorkManager.getInstance(this@AngApplication)
                     rw.enqueueUniquePeriodicWork(
@@ -80,16 +86,14 @@ class AngApplication : MultiDexApplication() {
                         androidx.work.ExistingPeriodicWorkPolicy.KEEP,
                         androidx.work.PeriodicWorkRequest.Builder(
                             com.v2ray.ang.handler.SubscriptionUpdater.UpdateTask::class.java,
-                            interval,
+                            intervalMinutes,
                             java.util.concurrent.TimeUnit.MINUTES
                         )
-                            .apply {
-                                setInitialDelay(interval, java.util.concurrent.TimeUnit.MINUTES)
-                            }
+                            .setInitialDelay(intervalMinutes, java.util.concurrent.TimeUnit.MINUTES)
                             .build()
                     )
                     
-                    android.util.Log.i(AppConfig.TAG, "Auto-update task configured on app start with interval: $interval minutes")
+                    android.util.Log.i(AppConfig.TAG, "Auto-update task configured on app start with interval: $intervalMinutes minutes")
                 }
             }
         }
