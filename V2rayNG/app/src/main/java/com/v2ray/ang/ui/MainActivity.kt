@@ -183,6 +183,9 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
             }
         }
 
+        // تنظیم auto-update task در اولین اجرا
+        setupAutoUpdateTaskOnFirstLaunch()
+
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (binding.drawerLayout.isDrawerOpen(GravityCompat.START)) {
@@ -194,6 +197,47 @@ class MainActivity : BaseActivity(), NavigationView.OnNavigationItemSelectedList
                 }
             }
         })
+    }
+
+    private fun setupAutoUpdateTaskOnFirstLaunch() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            // بررسی آیا auto-update فعال است
+            val autoUpdateEnabled = MmkvManager.decodeSettingsBool(
+                AppConfig.SUBSCRIPTION_AUTO_UPDATE, 
+                true  // پیش‌فرض true
+            )
+            
+            if (autoUpdateEnabled) {
+                val interval = MmkvManager.decodeSettingsString(
+                    AppConfig.SUBSCRIPTION_AUTO_UPDATE_INTERVAL,
+                    AppConfig.SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL
+                ).toLongEx()
+                
+                // فقط اگر interval معتبر است task را تنظیم کن
+                if (interval >= 15) {
+                    // تاخیر کمی برای اطمینان از راه‌اندازی کامل
+                    delay(2000)
+                    
+                    // استفاده از RemoteWorkManager برای تنظیم task
+                    val rw = androidx.work.multiprocess.RemoteWorkManager.getInstance(com.v2ray.ang.AngApplication.application)
+                    rw.enqueueUniquePeriodicWork(
+                        AppConfig.SUBSCRIPTION_UPDATE_TASK_NAME,
+                        androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                        androidx.work.PeriodicWorkRequest.Builder(
+                            com.v2ray.ang.handler.SubscriptionUpdater.UpdateTask::class.java,
+                            interval,
+                            java.util.concurrent.TimeUnit.MINUTES
+                        )
+                            .apply {
+                                setInitialDelay(interval, java.util.concurrent.TimeUnit.MINUTES)
+                            }
+                            .build()
+                    )
+                    
+                    Log.i(AppConfig.TAG, "Auto-update task configured on first launch with interval: $interval minutes")
+                }
+            }
+        }
     }
 
     @SuppressLint("NotifyDataSetChanged")
