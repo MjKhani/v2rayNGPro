@@ -134,7 +134,7 @@ class SettingsActivity : BaseActivity() {
                 val value = newValue as Boolean
                 autoUpdateCheck?.isChecked = value
                 autoUpdateInterval?.isEnabled = value
-                autoUpdateInterval?.text?.toLongEx()?.let {
+                autoUpdateInterval?.text?.toLongOrNull()?.let {
                     if (newValue) configureUpdateTask(it) else cancelUpdateTask()
                 }
                 true
@@ -143,10 +143,10 @@ class SettingsActivity : BaseActivity() {
                 var nval = any as String
 
                 // It must be greater than 15 minutes because WorkManager couldn't run tasks under 15 minutes intervals
-                nval =
-                    if (TextUtils.isEmpty(nval) || nval.toLongEx() < 15) AppConfig.SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL else nval
+                val interval = nval.toLongOrNull() ?: AppConfig.SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL.toLong()
+                nval = if (TextUtils.isEmpty(nval) || interval < 15) AppConfig.SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL else nval
                 autoUpdateInterval?.summary = nval
-                configureUpdateTask(nval.toLongEx())
+                configureUpdateTask(interval)
                 true
             }
 
