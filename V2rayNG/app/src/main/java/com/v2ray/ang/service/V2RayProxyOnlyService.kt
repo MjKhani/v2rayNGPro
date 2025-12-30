@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.annotation.RequiresApi
+import com.v2ray.ang.handler.NotificationManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.V2RayServiceManager
 import com.v2ray.ang.util.MyContextWrapper
@@ -36,8 +37,11 @@ class V2RayProxyOnlyService : Service(), ServiceControl {
      * Destroys the service.
      */
     override fun onDestroy() {
-        super.onDestroy()
+        // توقف core loop و حذف نوتیفیکیشن قبل از super.onDestroy()
         V2RayServiceManager.stopCoreLoop()
+        NotificationManager.cancelNotification()
+        
+        super.onDestroy()
     }
 
     /**
@@ -59,6 +63,9 @@ class V2RayProxyOnlyService : Service(), ServiceControl {
      * Stops the service.
      */
     override fun stopService() {
+        // حذف نوتیفیکیشن و توقف core قبل از stopSelf()
+        V2RayServiceManager.stopCoreLoop()
+        NotificationManager.cancelNotification()
         stopSelf()
     }
 
