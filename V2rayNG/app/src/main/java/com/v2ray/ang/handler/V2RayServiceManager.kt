@@ -17,7 +17,6 @@ import com.v2ray.ang.service.ServiceControl
 import com.v2ray.ang.service.V2RayProxyOnlyService
 import com.v2ray.ang.service.V2RayVpnService
 import com.v2ray.ang.util.MessageUtil
-import com.v2ray.ang.handler.PluginServiceManager
 import com.v2ray.ang.util.Utils
 import go.Seq
 import kotlinx.coroutines.CoroutineScope
@@ -67,21 +66,10 @@ object V2RayServiceManager {
     fun getRunningServerName() = currentConfig?.remarks.orEmpty()
 
     private fun startContextService(context: Context) {
-        if (coreController.isRunning) {
-            return
-        }
+        if (coreController.isRunning) return
         val guid = MmkvManager.getSelectServer() ?: return
         val config = MmkvManager.decodeServerConfig(guid) ?: return
-        if (config.configType != EConfigType.CUSTOM
-            && !Utils.isValidUrl(config.server)
-            && !Utils.isPureIpAddress(config.server.orEmpty())
-        ) return
 
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING) == true) {
-            context.toast(R.string.toast_warning_pref_proxysharing_short)
-        } else {
-            context.toast(R.string.toast_services_start)
-        }
         val intent = if ((MmkvManager.decodeSettingsString(AppConfig.PREF_MODE) ?: AppConfig.VPN) == AppConfig.VPN) {
             Intent(context.applicationContext, V2RayVpnService::class.java)
         } else {
@@ -95,62 +83,39 @@ object V2RayServiceManager {
     }
 
     fun startCoreLoop(): Boolean {
-        if (coreController.isRunning) {
-            return false
-        }
-
+        if (coreController.isRunning) return false
         val service = getService() ?: return false
         val guid = MmkvManager.getSelectServer() ?: return false
         val config = MmkvManager.decodeServerConfig(guid) ?: return false
         val result = V2rayConfigManager.getV2rayConfig(service, guid)
-
-        if (!result.status)
-            return false
+        if (!result.status) return false
 
         try {
             val mFilter = IntentFilter(AppConfig.BROADCAST_ACTION_SERVICE)
             mFilter.addAction(Intent.ACTION_SCREEN_ON)
             mFilter.addAction(Intent.ACTION_SCREEN_OFF)
-            mFilter.addAction(Intent.ACTION_USER_PRESENT)
             ContextCompat.registerReceiver(service, mMsgReceive, mFilter, Utils.receiverFlags())
-        } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Failed to register broadcast receiver", e)
-            return false
-        }
+        } catch (e: Exception) { return false }
 
         currentConfig = config
-
         try {
             coreController.startLoop(result.content)
-        } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Failed to start Core loop", e)
-            return false
-        }
+        } catch (e: Exception) { return false }
 
-        if (coreController.isRunning == false) {
-            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, "")
+        if (!coreController.isRunning) {
             NotificationManager.cancelNotification()
             return false
         }
 
-        try {
-            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_SUCCESS, "")
-            NotificationManager.showNotification(currentConfig)
-            NotificationManager.startSpeedNotification(currentConfig)
-
-            PluginServiceManager.runPlugin(service, config, result.socksPort)
-        } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Failed to startup service", e)
-            return false
-        }
-
+        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_SUCCESS, "")
+        NotificationManager.showNotification(currentConfig)
+        NotificationManager.startSpeedNotification(currentConfig)
+        PluginServiceManager.runPlugin(service, config, result.socksPort)
         return true
     }
 
     fun stopCoreLoop(): Boolean {
         val service = getService() ?: return false
-
-        // 1. Stop speed notification first to prevent it from updating while shutting down
         NotificationManager.stopSpeedNotification(currentConfig)
 
         if (coreController.isRunning) {
@@ -158,135 +123,46 @@ object V2RayServiceManager {
                 try {
                     coreController.stopLoop()
                 } catch (e: Exception) {
-                    Log.e(AppConfig.TAG, "Failed to stop V2Ray loop", e)
+                    Log.e(AppConfig.TAG, "Stop loop fail", e)
                 }
             }
         }
 
-        // 2. Clear UI state
         MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
-        
-        // 3. Unregister receiver safely
         try {
             service.unregisterReceiver(mMsgReceive)
-        } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Failed to unregister broadcast receiver", e)
-        }
+        } catch (e: Exception) {}
 
-        // 4. Stop plugins and finally cancel notification
         PluginServiceManager.stopPlugin()
         NotificationManager.cancelNotification()
-
         return true
     }
 
-    fun queryStats(tag: String, link: String): Long {
-        return coreController.queryStats(tag, link)
-    }
-
-    private fun measureV2rayDelay() {
-        if (coreController.isRunning == false) {
-            return
-        }
-
-        CoroutineScope(Dispatchers.IO).launch {
-            val service = getService() ?: return@launch
-            var time = -1L
-            var errorStr = ""
-
-            try {
-                time = coreController.measureDelay(SettingsManager.getDelayTestUrl())
-            } catch (e: Exception) {
-                Log.e(AppConfig.TAG, "Failed to measure delay with primary URL", e)
-                errorStr = e.message?.substringAfter("\":") ?: "empty message"
-            }
-
-            if (time == -1L) {
-                try {
-                    time = coreController.measureDelay(SettingsManager.getDelayTestUrl(true))
-                } catch (e: Exception) {
-                    Log.e(AppConfig.TAG, "Failed to measure delay with alternative URL", e)
-                    errorStr = e.message?.substringAfter("\":") ?: "empty message"
-                }
-            }
-
-            val result = if (time >= 0) {
-                service.getString(R.string.connection_test_available, time)
-            } else {
-                service.getString(R.string.connection_test_error, errorStr)
-            }
-            MessageUtil.sendMsg2UI(service, AppConfig.MSG_MEASURE_DELAY_SUCCESS, result)
-
-            if (time >= 0) {
-                SpeedtestManager.getRemoteIPInfo()?.let { ip ->
-                    MessageUtil.sendMsg2UI(service, AppConfig.MSG_MEASURE_DELAY_SUCCESS, "$result\n$ip")
-                }
-            }
-        }
-    }
-
-    private fun getService(): Service? {
-        return serviceControl?.get()?.getService()
-    }
+    private fun getService(): Service? = serviceControl?.get()?.getService()
 
     private class CoreCallback : CoreCallbackHandler {
-        override fun startup(): Long {
-            return 0
-        }
-
+        override fun startup(): Long = 0
         override fun shutdown(): Long {
-            val serviceControl = serviceControl?.get() ?: return -1
-            return try {
-                serviceControl.stopService()
-                0
-            } catch (e: Exception) {
-                Log.e(AppConfig.TAG, "Failed to stop service in callback", e)
-                -1
-            }
-        }
-
-        override fun onEmitStatus(l: Long, s: String?): Long {
+            serviceControl?.get()?.stopService()
             return 0
         }
+        override fun onEmitStatus(l: Long, s: String?): Long = 0
     }
 
     private class ReceiveMessageHandler : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
             val serviceControl = serviceControl?.get() ?: return
             when (intent?.getIntExtra("key", 0)) {
-                AppConfig.MSG_REGISTER_CLIENT -> {
-                    if (coreController.isRunning) {
-                        MessageUtil.sendMsg2UI(serviceControl.getService(), AppConfig.MSG_STATE_RUNNING, "")
-                    } else {
-                        MessageUtil.sendMsg2UI(serviceControl.getService(), AppConfig.MSG_STATE_NOT_RUNNING, "")
-                    }
-                }
-
-                AppConfig.MSG_STATE_STOP -> {
-                    Log.i(AppConfig.TAG, "Stop Service from Broadcast")
-                    serviceControl.stopService()
-                }
-
+                AppConfig.MSG_STATE_STOP -> serviceControl.stopService()
                 AppConfig.MSG_STATE_RESTART -> {
-                    Log.i(AppConfig.TAG, "Restart Service")
                     serviceControl.stopService()
                     Thread.sleep(500L)
                     startVService(serviceControl.getService())
                 }
-
-                AppConfig.MSG_MEASURE_DELAY -> {
-                    measureV2rayDelay()
-                }
             }
-
             when (intent?.action) {
-                Intent.ACTION_SCREEN_OFF -> {
-                    NotificationManager.stopSpeedNotification(currentConfig)
-                }
-
-                Intent.ACTION_SCREEN_ON -> {
-                    NotificationManager.startSpeedNotification(currentConfig)
-                }
+                Intent.ACTION_SCREEN_OFF -> NotificationManager.stopSpeedNotification(currentConfig)
+                Intent.ACTION_SCREEN_ON -> NotificationManager.startSpeedNotification(currentConfig)
             }
         }
     }
