@@ -9,7 +9,6 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.ProxyInfo
-import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.StrictMode
@@ -319,11 +318,15 @@ class V2RayVpnService : VpnService(), ServiceControl {
      * @param isForced Whether to force stop the service.
      */
     private fun stopV2Ray(isForced: Boolean = true) {
-//        val configName = defaultDPreference.getPrefString(PREF_CURR_CONFIG_GUID, "")
-//        val emptyInfo = VpnNetworkInfo()
-//        val info = loadVpnNetworkInfo(configName, emptyInfo)!! + (lastNetworkInfo ?: emptyInfo)
-//        saveVpnNetworkInfo(configName, info)
+        if (!isRunning) return
+        
         isRunning = false
+        
+        // توقف tun2socks
+        tun2SocksService?.stopTun2Socks()
+        tun2SocksService = null
+
+        // لغو callback شبکه در نسخه‌های جدید
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
                 connectivity.unregisterNetworkCallback(defaultNetworkCallback)
@@ -332,25 +335,22 @@ class V2RayVpnService : VpnService(), ServiceControl {
             }
         }
 
-        tun2SocksService?.stopTun2Socks()
-        tun2SocksService = null
-
+        // توقف core loop
         V2RayServiceManager.stopCoreLoop()
 
-        if (isForced) {
-            //stopSelf has to be called ahead of mInterface.close(). otherwise v2ray core cannot be stooped
-            //It's strage but true.
-            //This can be verified by putting stopself() behind and call stopLoop and startLoop
-            //in a row for several times. You will find that later created v2ray core report port in use
-            //which means the first v2ray core somehow failed to stop and release the port.
-            stopSelf()
-
-            try {
-                mInterface.close()
-            } catch (e: Exception) {
-                Log.e(AppConfig.TAG, "Failed to close VPN interface", e)
-            }
+        // بستن interface
+        try {
+            mInterface.close()
+        } catch (e: Exception) {
+            Log.e(AppConfig.TAG, "Failed to close VPN interface", e)
         }
+
+        // توقف سرویس
+        if (isForced) {
+            stopSelf()
+        }
+        
+        // حذف نوتیفیکیشن نهایی برای اطمینان
+        NotificationManager.cancelNotification()
     }
 }
-
