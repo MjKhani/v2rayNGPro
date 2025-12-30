@@ -34,6 +34,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
 
     private fun stopV2Ray() {
         V2RayServiceManager.stopCoreLoop()
+        // اصلاح اصلی برای حذف آیکون کلید VPN
         try {
             mInterface?.close()
             mInterface = null
@@ -53,9 +54,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
     override fun vpnProtect(socket: Int): Boolean = protect(socket)
 
     override fun attachBaseContext(newBase: Context?) {
-        val context = newBase?.let {
-            MyContextWrapper.wrap(it, SettingsManager.getLocale())
-        }
+        val context = newBase?.let { MyContextWrapper.wrap(it, SettingsManager.getLocale()) }
         super.attachBaseContext(context)
     }
 
