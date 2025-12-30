@@ -10,7 +10,6 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
-import com.v2ray.ang.dto.EConfigType
 import com.v2ray.ang.dto.ProfileItem
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.service.ServiceControl
@@ -28,7 +27,6 @@ import libv2ray.Libv2ray
 import java.lang.ref.SoftReference
 
 object V2RayServiceManager {
-
     private val coreController: CoreController = Libv2ray.newCoreController(CoreCallback())
     private val mMsgReceive = ReceiveMessageHandler()
     private var currentConfig: ProfileItem? = null
@@ -50,9 +48,7 @@ object V2RayServiceManager {
     }
 
     fun startVService(context: Context, guid: String? = null) {
-        if (guid != null) {
-            MmkvManager.setSelectServer(guid)
-        }
+        if (guid != null) MmkvManager.setSelectServer(guid)
         startContextService(context)
     }
 
@@ -63,13 +59,8 @@ object V2RayServiceManager {
 
     fun isRunning() = coreController.isRunning
 
-    fun getRunningServerName() = currentConfig?.remarks.orEmpty()
-
     private fun startContextService(context: Context) {
         if (coreController.isRunning) return
-        val guid = MmkvManager.getSelectServer() ?: return
-        val config = MmkvManager.decodeServerConfig(guid) ?: return
-
         val intent = if ((MmkvManager.decodeSettingsString(AppConfig.PREF_MODE) ?: AppConfig.VPN) == AppConfig.VPN) {
             Intent(context.applicationContext, V2RayVpnService::class.java)
         } else {
@@ -84,20 +75,20 @@ object V2RayServiceManager {
 
     fun startCoreLoop(): Boolean {
         if (coreController.isRunning) return false
-        val service = getService() ?: return false
+        val service = serviceControl?.get()?.getService() ?: return false
         val guid = MmkvManager.getSelectServer() ?: return false
-        val config = MmkvManager.decodeServerConfig(guid) ?: return false
         val result = V2rayConfigManager.getV2rayConfig(service, guid)
         if (!result.status) return false
 
         try {
-            val mFilter = IntentFilter(AppConfig.BROADCAST_ACTION_SERVICE)
-            mFilter.addAction(Intent.ACTION_SCREEN_ON)
-            mFilter.addAction(Intent.ACTION_SCREEN_OFF)
+            val mFilter = IntentFilter(AppConfig.BROADCAST_ACTION_SERVICE).apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            }
             ContextCompat.registerReceiver(service, mMsgReceive, mFilter, Utils.receiverFlags())
         } catch (e: Exception) { return false }
 
-        currentConfig = config
+        currentConfig = MmkvManager.decodeServerConfig(guid)
         try {
             coreController.startLoop(result.content)
         } catch (e: Exception) { return false }
@@ -110,35 +101,24 @@ object V2RayServiceManager {
         MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_SUCCESS, "")
         NotificationManager.showNotification(currentConfig)
         NotificationManager.startSpeedNotification(currentConfig)
-        PluginServiceManager.runPlugin(service, config, result.socksPort)
+        PluginServiceManager.runPlugin(service, currentConfig!!, result.socksPort)
         return true
     }
 
     fun stopCoreLoop(): Boolean {
-        val service = getService() ?: return false
+        val service = serviceControl?.get()?.getService() ?: return false
         NotificationManager.stopSpeedNotification(currentConfig)
-
         if (coreController.isRunning) {
             CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    coreController.stopLoop()
-                } catch (e: Exception) {
-                    Log.e(AppConfig.TAG, "Stop loop fail", e)
-                }
+                try { coreController.stopLoop() } catch (e: Exception) {}
             }
         }
-
         MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
-        try {
-            service.unregisterReceiver(mMsgReceive)
-        } catch (e: Exception) {}
-
+        try { service.unregisterReceiver(mMsgReceive) } catch (e: Exception) {}
         PluginServiceManager.stopPlugin()
         NotificationManager.cancelNotification()
         return true
     }
-
-    private fun getService(): Service? = serviceControl?.get()?.getService()
 
     private class CoreCallback : CoreCallbackHandler {
         override fun startup(): Long = 0
