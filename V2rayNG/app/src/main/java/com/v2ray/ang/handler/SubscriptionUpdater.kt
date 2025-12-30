@@ -26,36 +26,36 @@ object SubscriptionUpdater {
                 .setContentTitle(context.getString(R.string.title_pref_auto_update_subscription))
                 .setSmallIcon(R.drawable.ic_stat_name)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setPriority(NotificationCompat.PRIORITY_MIN) // اولویت پایین برای عدم مزاحمت
 
-        /**
-         * Performs the subscription update work.
-         * @return The result of the work.
-         */
         @SuppressLint("MissingPermission")
         override suspend fun doWork(): Result {
             Log.i(AppConfig.TAG, "subscription automatic update starting")
 
             val subs = MmkvManager.decodeSubscriptions().filter { it.second.autoUpdate }
 
+            if (subs.isEmpty()) return Result.success()
+
+            // ایجاد کانال اعلان برای آپدیت
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    AppConfig.SUBSCRIPTION_UPDATE_CHANNEL,
+                    AppConfig.SUBSCRIPTION_UPDATE_CHANNEL_NAME,
+                    NotificationManager.IMPORTANCE_MIN
+                )
+                notificationManager.createNotificationChannel(channel)
+            }
+
             for (sub in subs) {
                 val subItem = sub.second
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    notification.setChannelId(AppConfig.SUBSCRIPTION_UPDATE_CHANNEL)
-                    val channel =
-                        NotificationChannel(
-                            AppConfig.SUBSCRIPTION_UPDATE_CHANNEL,
-                            AppConfig.SUBSCRIPTION_UPDATE_CHANNEL_NAME,
-                            NotificationManager.IMPORTANCE_MIN
-                        )
-                    notificationManager.createNotificationChannel(channel)
-                }
+                notification.setContentText("Updating ${subItem.remarks}")
                 notificationManager.notify(3, notification.build())
+                
                 Log.i(AppConfig.TAG, "subscription automatic update: ---${subItem.remarks}")
                 AngConfigManager.updateConfigViaSub(Pair(sub.first, subItem))
-                notification.setContentText("Updating ${subItem.remarks}")
             }
+
+            // حذف حتمی اعلان بعد از اتمام کار
             notificationManager.cancel(3)
             return Result.success()
         }
