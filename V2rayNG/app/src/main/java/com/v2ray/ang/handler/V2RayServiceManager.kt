@@ -6,12 +6,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
-import android.util.Log
 import androidx.core.content.ContextCompat
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.ProfileItem
-import com.v2ray.ang.extension.toast
 import com.v2ray.ang.service.ServiceControl
 import com.v2ray.ang.service.V2RayProxyOnlyService
 import com.v2ray.ang.service.V2RayVpnService
@@ -39,31 +37,18 @@ object V2RayServiceManager {
         }
 
     fun startVServiceFromToggle(context: Context): Boolean {
-        if (MmkvManager.getSelectServer().isNullOrEmpty()) {
-            context.toast(R.string.app_tile_first_use)
-            return false
-        }
+        if (MmkvManager.getSelectServer().isNullOrEmpty()) return false
         startContextService(context)
         return true
     }
 
-    fun stopVService(context: Context) {
-        context.toast(R.string.toast_services_stop)
-        MessageUtil.sendMsg2Service(context, AppConfig.MSG_STATE_STOP, "")
-    }
-
     private fun startContextService(context: Context) {
-        if (coreController.isRunning) return
         val intent = if ((MmkvManager.decodeSettingsString(AppConfig.PREF_MODE) ?: AppConfig.VPN) == AppConfig.VPN) {
             Intent(context.applicationContext, V2RayVpnService::class.java)
         } else {
             Intent(context.applicationContext, V2RayProxyOnlyService::class.java)
         }
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.N_MR1) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
-        }
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.N_MR1) context.startForegroundService(intent) else context.startService(intent)
     }
 
     fun startCoreLoop(): Boolean {
@@ -72,43 +57,19 @@ object V2RayServiceManager {
         val guid = MmkvManager.getSelectServer() ?: return false
         val result = V2rayConfigManager.getV2rayConfig(service, guid)
         if (!result.status) return false
-
-        try {
-            val mFilter = IntentFilter(AppConfig.BROADCAST_ACTION_SERVICE).apply {
-                addAction(Intent.ACTION_SCREEN_ON)
-                addAction(Intent.ACTION_SCREEN_OFF)
-            }
-            ContextCompat.registerReceiver(service, mMsgReceive, mFilter, Utils.receiverFlags())
-        } catch (e: Exception) { return false }
-
+        
         currentConfig = MmkvManager.decodeServerConfig(guid)
-        try {
-            coreController.startLoop(result.content)
-        } catch (e: Exception) { return false }
-
-        if (!coreController.isRunning) {
-            NotificationManager.cancelNotification()
-            return false
-        }
-
-        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_START_SUCCESS, "")
+        coreController.startLoop(result.content)
+        
         NotificationManager.showNotification(currentConfig)
-        NotificationManager.startSpeedNotification(currentConfig)
-        PluginServiceManager.runPlugin(service, currentConfig!!, result.socksPort)
         return true
     }
 
     fun stopCoreLoop(): Boolean {
-        val service = serviceControl?.get()?.getService() ?: return false
-        NotificationManager.stopSpeedNotification(currentConfig)
         if (coreController.isRunning) {
-            CoroutineScope(Dispatchers.IO).launch {
-                try { coreController.stopLoop() } catch (e: Exception) {}
-            }
+            CoroutineScope(Dispatchers.IO).launch { coreController.stopLoop() }
         }
-        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
-        try { service.unregisterReceiver(mMsgReceive) } catch (e: Exception) {}
-        PluginServiceManager.stopPlugin()
+        // حذف اعلان بلافاصله بعد از استاپ
         NotificationManager.cancelNotification()
         return true
     }
@@ -124,23 +85,8 @@ object V2RayServiceManager {
 
     private class ReceiveMessageHandler : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
-            val serviceControl = serviceControl?.get() ?: return
-            when (intent?.getIntExtra("key", 0)) {
-                AppConfig.MSG_STATE_STOP -> serviceControl.stopService()
-                AppConfig.MSG_STATE_RESTART -> {
-                    serviceControl.stopService()
-                    Thread.sleep(500L)
-                    val intentStart = if ((MmkvManager.decodeSettingsString(AppConfig.PREF_MODE) ?: AppConfig.VPN) == AppConfig.VPN) {
-                        Intent(serviceControl.getService(), V2RayVpnService::class.java)
-                    } else {
-                        Intent(serviceControl.getService(), V2RayProxyOnlyService::class.java)
-                    }
-                    serviceControl.getService().startService(intentStart)
-                }
-            }
-            when (intent?.action) {
-                Intent.ACTION_SCREEN_OFF -> NotificationManager.stopSpeedNotification(currentConfig)
-                Intent.ACTION_SCREEN_ON -> NotificationManager.startSpeedNotification(currentConfig)
+            if (intent?.getIntExtra("key", 0) == AppConfig.MSG_STATE_STOP) {
+                serviceControl?.get()?.stopService()
             }
         }
     }
