@@ -67,6 +67,8 @@ class V2RayVpnService : VpnService(), ServiceControl {
         }
     }
 
+    private var lastStartId: Int = 0
+
     override fun onCreate() {
         super.onCreate()
         val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
@@ -89,6 +91,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastStartId = startId
         if (V2RayServiceManager.startCoreLoop()) {
             startService()
         }
@@ -345,9 +348,24 @@ class V2RayVpnService : VpnService(), ServiceControl {
             Log.e(AppConfig.TAG, "Failed to close VPN interface", e)
         }
 
-        // توقف سرویس
+        // توقف سرویس - استفاده از متد stopSelf از کلاس Service
         if (isForced) {
-            this.stopSelf() // استفاده از this.stopSelf() به جای stopSelf()
+            // روش اول: استفاده از super.stopSelf() 
+            // روش دوم: استفاده از stopSelf() با startId
+            try {
+                // روش ۱: تلاش برای فراخوانی مستقیم
+                super.stopSelf()
+            } catch (e: Exception) {
+                // روش ۲: استفاده از stopSelf با startId
+                try {
+                    super.stopSelf(lastStartId)
+                } catch (e2: Exception) {
+                    Log.e(AppConfig.TAG, "Failed to stop service using stopSelf", e2)
+                    // روش ۳: توقف با استفاده از stopService
+                    val intent = Intent(this, V2RayVpnService::class.java)
+                    this.stopService(intent)
+                }
+            }
         }
         
         // حذف نوتیفیکیشن نهایی برای اطمینان
