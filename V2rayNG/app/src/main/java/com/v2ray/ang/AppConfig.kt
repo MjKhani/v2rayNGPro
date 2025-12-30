@@ -1,19 +1,12 @@
 package com.v2ray.ang
 
 object AppConfig {
-
-    /** The application's package name. */
     const val ANG_PACKAGE = BuildConfig.APPLICATION_ID
     const val TAG = BuildConfig.APPLICATION_ID
-
-    /** Directory names used in the app's file system. */
     const val DIR_ASSETS = "assets"
     const val DIR_BACKUPS = "backups"
-
-    /** Legacy configuration keys. */
     const val ANG_CONFIG = "ang_config"
 
-    /** Preferences mapped to MMKV storage. */
     const val PREF_SNIFFING_ENABLED = "pref_sniffing_enabled"
     const val PREF_ROUTE_ONLY_ENABLED = "pref_route_only_enabled"
     const val PREF_PER_APP_PROXY = "pref_per_app_proxy"
@@ -50,18 +43,16 @@ object AppConfig {
     const val PREF_FRAGMENT_LENGTH = "pref_fragment_length"
     const val PREF_FRAGMENT_INTERVAL = "pref_fragment_interval"
 
-    // --- تنظیمات Auto-Update ساب‌سکریپشن ---
+    // Subscription Auto-Update constants
     const val PREF_SUB_AUTO_UPDATE = "pref_sub_auto_update"
     const val PREF_SUB_UPDATE_INTERVAL = "pref_sub_update_interval"
     const val SUBSCRIPTION_UPDATE_TASK_NAME = "subscription_update_task"
     const val SUBSCRIPTION_UPDATE_CHANNEL = "subscription_update_channel"
     const val SUBSCRIPTION_UPDATE_CHANNEL_NAME = "Subscription Update"
     const val SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL = "60"
-    // ------------------------------------
 
     const val HTTP_PORT = "http_port"
     const val SOCKS_PORT = "socks_port"
-
     const val BROADCAST_ACTION_SERVICE = "com.v2ray.ang.action.service"
     const val BROADCAST_ACTION_ACTIVITY = "com.v2ray.ang.action.activity"
 
@@ -80,18 +71,13 @@ object AppConfig {
 
     const val VPN = "VPN"
     const val PROXY_ONLY = "PROXY_ONLY"
-
     const val RAY_NG_CHANNEL_ID = "v2rayng_channel_6"
     const val RAY_NG_CHANNEL_NAME = "v2rayNG notification channel"
-
     const val UPLINK = "uplink"
     const val DOWNLINK = "downlink"
-
     const val TAG_DIRECT = "direct"
     const val TAG_BLOCKED = "blocked"
-
     const val LOOPBACK = "127.0.0.1"
-
     const val APP_WIKI_MODE = "https://github.com/2dust/v2rayNG/wiki/Mode"
     const val APP_PROMOTION_URL = "aHR0cHM6Ly90Lm1lL3YycmF5TkdfUHJvbW90aW9u"
 
@@ -100,35 +86,11 @@ object AppConfig {
     val DNS_YANDEX_ADDRESSES = arrayListOf("77.88.8.8", "77.88.8.1", "2a02:6b8::feed:0ff", "2a02:6b8:0:1::feed:0ff")
 
     val ROUTED_IP_LIST = arrayListOf(
-        "0.0.0.0/5",
-        "8.0.0.0/7",
-        "11.0.0.0/8",
-        "12.0.0.0/6",
-        "16.0.0.0/4",
-        "32.0.0.0/3",
-        "64.0.0.0/2",
-        "128.0.0.0/3",
-        "160.0.0.0/5",
-        "168.0.0.0/6",
-        "172.0.0.0/12",
-        "172.32.0.0/11",
-        "172.64.0.0/10",
-        "172.128.0.0/9",
-        "173.0.0.0/8",
-        "174.0.0.0/7",
-        "176.0.0.0/4",
-        "192.0.0.0/9",
-        "192.128.0.0/11",
-        "192.160.0.0/13",
-        "192.169.0.0/16",
-        "192.170.0.0/15",
-        "192.172.0.0/14",
-        "192.176.0.0/12",
-        "192.192.0.0/10",
-        "193.0.0.0/8",
-        "194.0.0.0/7",
-        "196.0.0.0/6",
-        "200.0.0.0/5",
-        "208.0.0.0/4"
+        "0.0.0.0/5", "8.0.0.0/7", "11.0.0.0/8", "12.0.0.0/6", "16.0.0.0/4", "32.0.0.0/3",
+        "64.0.0.0/2", "128.0.0.0/3", "160.0.0.0/5", "168.0.0.0/6", "172.0.0.0/12",
+        "172.32.0.0/11", "172.64.0.0/10", "172.128.0.0/9", "173.0.0.0/8", "174.0.0.0/7",
+        "176.0.0.0/4", "192.0.0.0/9", "192.128.0.0/11", "192.160.0.0/13", "192.169.0.0/16",
+        "192.170.0.0/15", "192.172.0.0/14", "192.176.0.0/12", "192.192.0.0/10", "193.0.0.0/8",
+        "194.0.0.0/7", "196.0.0.0/6", "200.0.0.0/5", "208.0.0.0/4"
     )
 }
