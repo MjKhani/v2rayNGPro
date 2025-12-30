@@ -41,11 +41,6 @@ object V2RayServiceManager {
             Libv2ray.initCoreEnv(Utils.userAssetPath(value?.get()?.getService()), Utils.getDeviceIdForXUDPBaseKey())
         }
 
-    /**
-     * Starts the V2Ray service from a toggle action.
-     * @param context The context from which the service is started.
-     * @return True if the service was started successfully, false otherwise.
-     */
     fun startVServiceFromToggle(context: Context): Boolean {
         if (MmkvManager.getSelectServer().isNullOrEmpty()) {
             context.toast(R.string.app_tile_first_use)
@@ -55,11 +50,6 @@ object V2RayServiceManager {
         return true
     }
 
-    /**
-     * Starts the V2Ray service.
-     * @param context The context from which the service is started.
-     * @param guid The GUID of the server configuration to use (optional).
-     */
     fun startVService(context: Context, guid: String? = null) {
         if (guid != null) {
             MmkvManager.setSelectServer(guid)
@@ -67,32 +57,15 @@ object V2RayServiceManager {
         startContextService(context)
     }
 
-    /**
-     * Stops the V2Ray service.
-     * @param context The context from which the service is stopped.
-     */
     fun stopVService(context: Context) {
         context.toast(R.string.toast_services_stop)
         MessageUtil.sendMsg2Service(context, AppConfig.MSG_STATE_STOP, "")
     }
 
-    /**
-     * Checks if the V2Ray service is running.
-     * @return True if the service is running, false otherwise.
-     */
     fun isRunning() = coreController.isRunning
 
-    /**
-     * Gets the name of the currently running server.
-     * @return The name of the running server.
-     */
     fun getRunningServerName() = currentConfig?.remarks.orEmpty()
 
-    /**
-     * Starts the context service for V2Ray.
-     * Chooses between VPN service or Proxy-only service based on user settings.
-     * @param context The context from which the service is started.
-     */
     private fun startContextService(context: Context) {
         if (coreController.isRunning) {
             return
@@ -103,8 +76,6 @@ object V2RayServiceManager {
             && !Utils.isValidUrl(config.server)
             && !Utils.isPureIpAddress(config.server.orEmpty())
         ) return
-//        val result = V2rayConfigUtil.getV2rayConfig(context, guid)
-//        if (!result.status) return
 
         if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING) == true) {
             context.toast(R.string.toast_warning_pref_proxysharing_short)
@@ -123,11 +94,6 @@ object V2RayServiceManager {
         }
     }
 
-    /**
-     * Refer to the official documentation for [registerReceiver](https://developer.android.com/reference/androidx/core/content/ContextCompat#registerReceiver(android.content.Context,android.content.BroadcastReceiver,android.content.IntentFilter,int):
-     * `registerReceiver(Context, BroadcastReceiver, IntentFilter, int)`.
-     * Starts the V2Ray core service.
-     */
     fun startCoreLoop(): Boolean {
         if (coreController.isRunning) {
             return false
@@ -137,6 +103,7 @@ object V2RayServiceManager {
         val guid = MmkvManager.getSelectServer() ?: return false
         val config = MmkvManager.decodeServerConfig(guid) ?: return false
         val result = V2rayConfigManager.getV2rayConfig(service, guid)
+
         if (!result.status)
             return false
 
@@ -176,69 +143,47 @@ object V2RayServiceManager {
             Log.e(AppConfig.TAG, "Failed to startup service", e)
             return false
         }
+
         return true
     }
 
-    /**
-     * Stops the V2Ray core service.
-     * Unregisters broadcast receivers, stops notifications, and shuts down plugins.
-     * @return True if the core was stopped successfully, false otherwise.
-     */
     fun stopCoreLoop(): Boolean {
         val service = getService() ?: return false
 
+        // 1. Stop speed notification first to prevent it from updating while shutting down
+        NotificationManager.stopSpeedNotification(currentConfig)
+
         if (coreController.isRunning) {
-            try {
-                // توقف core در thread اصلی برای اطمینان از توقف کامل
-                kotlin.runCatching {
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
                     coreController.stopLoop()
-                }.onFailure { e ->
+                } catch (e: Exception) {
                     Log.e(AppConfig.TAG, "Failed to stop V2Ray loop", e)
                 }
-            } catch (e: Exception) {
-                Log.e(AppConfig.TAG, "Failed to stop V2Ray loop", e)
             }
         }
 
-        // حذف نوتیفیکیشن بلافاصله
-        NotificationManager.cancelNotification()
-        NotificationManager.stopSpeedNotification(currentConfig)
-        
-        // ارسال پیام توقف به UI
+        // 2. Clear UI state
         MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
         
-        // لغو ثبت receiver
+        // 3. Unregister receiver safely
         try {
             service.unregisterReceiver(mMsgReceive)
         } catch (e: Exception) {
-            // Receiver ممکن است قبلاً لغو شده باشد
-            Log.d(AppConfig.TAG, "Receiver already unregistered or not registered")
+            Log.e(AppConfig.TAG, "Failed to unregister broadcast receiver", e)
         }
-        
-        // توقف پلاگین‌ها
+
+        // 4. Stop plugins and finally cancel notification
         PluginServiceManager.stopPlugin()
-        
-        // پاک کردن منابع
-        currentConfig = null
-        
+        NotificationManager.cancelNotification()
+
         return true
     }
 
-    /**
-     * Queries the statistics for a given tag and link.
-     * @param tag The tag to query.
-     * @param link The link to query.
-     * @return The statistics value.
-     */
     fun queryStats(tag: String, link: String): Long {
         return coreController.queryStats(tag, link)
     }
 
-    /**
-     * Measures the connection delay for the current V2Ray configuration.
-     * Tests with primary URL first, then falls back to alternative URL if needed.
-     * Also fetches remote IP information if the delay test was successful.
-     */
     private fun measureV2rayDelay() {
         if (coreController.isRunning == false) {
             return
@@ -255,6 +200,7 @@ object V2RayServiceManager {
                 Log.e(AppConfig.TAG, "Failed to measure delay with primary URL", e)
                 errorStr = e.message?.substringAfter("\":") ?: "empty message"
             }
+
             if (time == -1L) {
                 try {
                     time = coreController.measureDelay(SettingsManager.getDelayTestUrl(true))
@@ -271,7 +217,6 @@ object V2RayServiceManager {
             }
             MessageUtil.sendMsg2UI(service, AppConfig.MSG_MEASURE_DELAY_SUCCESS, result)
 
-            // Only fetch IP info if the delay test was successful
             if (time >= 0) {
                 SpeedtestManager.getRemoteIPInfo()?.let { ip ->
                     MessageUtil.sendMsg2UI(service, AppConfig.MSG_MEASURE_DELAY_SUCCESS, "$result\n$ip")
@@ -280,31 +225,15 @@ object V2RayServiceManager {
         }
     }
 
-    /**
-     * Gets the current service instance.
-     * @return The current service instance, or null if not available.
-     */
     private fun getService(): Service? {
         return serviceControl?.get()?.getService()
     }
 
-    /**
-     * Core callback handler implementation for handling V2Ray core events.
-     * Handles startup, shutdown, socket protection, and status emission.
-     */
     private class CoreCallback : CoreCallbackHandler {
-        /**
-         * Called when V2Ray core starts up.
-         * @return 0 for success, any other value for failure.
-         */
         override fun startup(): Long {
             return 0
         }
 
-        /**
-         * Called when V2Ray core shuts down.
-         * @return 0 for success, any other value for failure.
-         */
         override fun shutdown(): Long {
             val serviceControl = serviceControl?.get() ?: return -1
             return try {
@@ -316,28 +245,12 @@ object V2RayServiceManager {
             }
         }
 
-        /**
-         * Called when V2Ray core emits status information.
-         * @param l Status code.
-         * @param s Status message.
-         * @return Always returns 0.
-         */
         override fun onEmitStatus(l: Long, s: String?): Long {
             return 0
         }
     }
 
-    /**
-     * Broadcast receiver for handling messages sent to the service.
-     * Handles registration, service control, and screen events.
-     */
     private class ReceiveMessageHandler : BroadcastReceiver() {
-        /**
-         * Handles received broadcast messages.
-         * Processes service control messages and screen state changes.
-         * @param ctx The context in which the receiver is running.
-         * @param intent The intent being received.
-         */
         override fun onReceive(ctx: Context?, intent: Intent?) {
             val serviceControl = serviceControl?.get() ?: return
             when (intent?.getIntExtra("key", 0)) {
@@ -349,16 +262,8 @@ object V2RayServiceManager {
                     }
                 }
 
-                AppConfig.MSG_UNREGISTER_CLIENT -> {
-                    // nothing to do
-                }
-
-                AppConfig.MSG_STATE_START -> {
-                    // nothing to do
-                }
-
                 AppConfig.MSG_STATE_STOP -> {
-                    Log.i(AppConfig.TAG, "Stop Service")
+                    Log.i(AppConfig.TAG, "Stop Service from Broadcast")
                     serviceControl.stopService()
                 }
 
@@ -376,12 +281,10 @@ object V2RayServiceManager {
 
             when (intent?.action) {
                 Intent.ACTION_SCREEN_OFF -> {
-                    Log.i(AppConfig.TAG, "SCREEN_OFF, stop querying stats")
                     NotificationManager.stopSpeedNotification(currentConfig)
                 }
 
                 Intent.ACTION_SCREEN_ON -> {
-                    Log.i(AppConfig.TAG, "SCREEN_ON, start querying stats")
                     NotificationManager.startSpeedNotification(currentConfig)
                 }
             }
