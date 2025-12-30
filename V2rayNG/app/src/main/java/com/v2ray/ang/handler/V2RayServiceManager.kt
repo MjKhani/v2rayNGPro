@@ -39,8 +39,10 @@ object V2RayServiceManager {
     var serviceControl: SoftReference<ServiceControl>? = null
         set(value) {
             field = value
-            Seq.setContext(value?.get()?.getService()?.applicationContext)
-            Libv2ray.initCoreEnv(Utils.userAssetPath(value?.get()?.getService()), Utils.getDeviceIdForXUDPBaseKey())
+            value?.get()?.getService()?.applicationContext?.let { context ->
+                Seq.setContext(context)
+                Libv2ray.initCoreEnv(Utils.userAssetPath(context), Utils.getDeviceIdForXUDPBaseKey())
+            }
         }
 
     /**
@@ -105,23 +107,33 @@ object V2RayServiceManager {
             && !Utils.isValidUrl(config.server)
             && !Utils.isPureIpAddress(config.server.orEmpty())
         ) return
-//        val result = V2rayConfigUtil.getV2rayConfig(context, guid)
-//        if (!result.status) return
 
         if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING) == true) {
             context.toast(R.string.toast_warning_pref_proxysharing_short)
         } else {
             context.toast(R.string.toast_services_start)
         }
+        
         val intent = if ((MmkvManager.decodeSettingsString(AppConfig.PREF_MODE) ?: AppConfig.VPN) == AppConfig.VPN) {
             Intent(context.applicationContext, V2RayVpnService::class.java)
         } else {
             Intent(context.applicationContext, V2RayProxyOnlyService::class.java)
         }
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.N_MR1) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+        
+        // اضافه کردن flag برای جلوگیری از خطای SecurityException
+        intent.flags = Intent.FLAG_INCLUDE_STOPPED_PACKAGES
+        
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        } catch (e: SecurityException) {
+            Log.e(AppConfig.TAG, "SecurityException when starting service: ${e.message}")
+            context.toast("Failed to start service: ${e.message}")
+        } catch (e: Exception) {
+            Log.e(AppConfig.TAG, "Failed to start service: ${e.message}")
         }
     }
 
@@ -189,47 +201,54 @@ object V2RayServiceManager {
     fun stopCoreLoop(): Boolean {
         val service = getService() ?: return false
 
-        // اول notification را متوقف می‌کنیم
+        Log.i(AppConfig.TAG, "Stopping V2Ray core loop...")
+
+        // اول notification speed را متوقف می‌کنیم
         NotificationManager.stopSpeedNotification(currentConfig)
 
-        // سپس core را به صورت blocking متوقف می‌کنیم
-        if (coreController.isRunning) {
-            try {
-                // استفاده از runBlocking برای اطمینان از توقف کامل قبل از ادامه
-                runBlocking(Dispatchers.IO) {
-                    try {
-                        coreController.stopLoop()
-                        // صبر کوتاه برای اطمینان از توقف کامل
-                        kotlinx.coroutines.delay(100)
-                    } catch (e: Exception) {
-                        Log.e(AppConfig.TAG, "Failed to stop V2Ray loop", e)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(AppConfig.TAG, "Failed to stop core in blocking mode", e)
-            }
-        }
-
-        // حالا پیام موفقیت را ارسال می‌کنیم
-        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
-
-        // سپس plugin را متوقف می‌کنیم
+        // توقف plugin
         try {
             PluginServiceManager.stopPlugin()
         } catch (e: Exception) {
             Log.e(AppConfig.TAG, "Failed to stop plugin", e)
         }
 
-        // broadcast receiver را unregister می‌کنیم
+        // توقف core loop
+        if (coreController.isRunning) {
+            try {
+                // استفاده از Coroutine برای جلوگیری از block شدن
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        coreController.stopLoop()
+                        // تأخیر کوتاه برای اطمینان از توقف کامل
+                        kotlinx.coroutines.delay(200)
+                    } catch (e: Exception) {
+                        Log.e(AppConfig.TAG, "Failed to stop V2Ray loop", e)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(AppConfig.TAG, "Failed to stop core loop", e)
+            }
+        }
+
+        // unregister broadcast receiver
         try {
             service.unregisterReceiver(mMsgReceive)
         } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Failed to unregister broadcast receiver", e)
+            // ممکن است receiver قبلاً unregister شده باشد
+            Log.d(AppConfig.TAG, "Receiver unregister failed (might be already unregistered): ${e.message}")
         }
 
-        // در نهایت notification را کامل cancel می‌کنیم
+        // ارسال پیام توقف موفقیت‌آمیز
+        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
+
+        // در نهایت notification را cancel می‌کنیم
         NotificationManager.cancelNotification()
 
+        // پاکسازی config فعلی
+        currentConfig = null
+
+        Log.i(AppConfig.TAG, "V2Ray core loop stopped successfully")
         return true
     }
 
@@ -367,15 +386,18 @@ object V2RayServiceManager {
                 }
 
                 AppConfig.MSG_STATE_STOP -> {
-                    Log.i(AppConfig.TAG, "Stop Service")
+                    Log.i(AppConfig.TAG, "Stop Service received via broadcast")
                     serviceControl.stopService()
                 }
 
                 AppConfig.MSG_STATE_RESTART -> {
-                    Log.i(AppConfig.TAG, "Restart Service")
+                    Log.i(AppConfig.TAG, "Restart Service received via broadcast")
                     serviceControl.stopService()
-                    Thread.sleep(500L)
-                    startVService(serviceControl.getService())
+                    // تأخیر قبل از شروع مجدد
+                    CoroutineScope(Dispatchers.IO).launch {
+                        kotlinx.coroutines.delay(500L)
+                        startVService(serviceControl.getService())
+                    }
                 }
 
                 AppConfig.MSG_MEASURE_DELAY -> {
