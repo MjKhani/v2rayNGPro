@@ -188,25 +188,39 @@ object V2RayServiceManager {
         val service = getService() ?: return false
 
         if (coreController.isRunning) {
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
+            try {
+                // توقف core در thread اصلی برای اطمینان از توقف کامل
+                kotlin.runCatching {
                     coreController.stopLoop()
-                } catch (e: Exception) {
+                }.onFailure { e ->
                     Log.e(AppConfig.TAG, "Failed to stop V2Ray loop", e)
                 }
+            } catch (e: Exception) {
+                Log.e(AppConfig.TAG, "Failed to stop V2Ray loop", e)
             }
         }
 
-        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
+        // حذف نوتیفیکیشن بلافاصله
         NotificationManager.cancelNotification()
-
+        NotificationManager.stopSpeedNotification(currentConfig)
+        
+        // ارسال پیام توقف به UI
+        MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
+        
+        // لغو ثبت receiver
         try {
             service.unregisterReceiver(mMsgReceive)
         } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Failed to unregister broadcast receiver", e)
+            // Receiver ممکن است قبلاً لغو شده باشد
+            Log.d(AppConfig.TAG, "Receiver already unregistered or not registered")
         }
+        
+        // توقف پلاگین‌ها
         PluginServiceManager.stopPlugin()
-
+        
+        // پاک کردن منابع
+        currentConfig = null
+        
         return true
     }
 
