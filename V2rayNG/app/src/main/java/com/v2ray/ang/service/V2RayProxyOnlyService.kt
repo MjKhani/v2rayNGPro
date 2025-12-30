@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.annotation.RequiresApi
+import com.v2ray.ang.AppConfig
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.V2RayServiceManager
 import com.v2ray.ang.util.MyContextWrapper
@@ -18,6 +20,7 @@ class V2RayProxyOnlyService : Service(), ServiceControl {
     override fun onCreate() {
         super.onCreate()
         V2RayServiceManager.serviceControl = SoftReference(this)
+        Log.i(AppConfig.TAG, "V2RayProxyOnlyService created")
     }
 
     /**
@@ -36,8 +39,15 @@ class V2RayProxyOnlyService : Service(), ServiceControl {
      * Destroys the service.
      */
     override fun onDestroy() {
+        Log.i(AppConfig.TAG, "V2RayProxyOnlyService destroying")
+        // اطمینان از توقف کامل قبل از destroy
+        try {
+            V2RayServiceManager.stopCoreLoop()
+        } catch (e: Exception) {
+            Log.e(AppConfig.TAG, "Failed to stop core loop in onDestroy", e)
+        }
         super.onDestroy()
-        V2RayServiceManager.stopCoreLoop()
+        Log.i(AppConfig.TAG, "V2RayProxyOnlyService destroyed")
     }
 
     /**
@@ -59,7 +69,12 @@ class V2RayProxyOnlyService : Service(), ServiceControl {
      * Stops the service.
      */
     override fun stopService() {
-        stopSelf()
+        Log.i(AppConfig.TAG, "Stopping V2RayProxyOnlyService")
+        try {
+            stopSelf()
+        } catch (e: Exception) {
+            Log.e(AppConfig.TAG, "Failed to stop service", e)
+        }
     }
 
     /**
