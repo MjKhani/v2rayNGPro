@@ -23,6 +23,8 @@ import go.Seq
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runBlocking
 import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
 import libv2ray.Libv2ray
@@ -187,25 +189,46 @@ object V2RayServiceManager {
     fun stopCoreLoop(): Boolean {
         val service = getService() ?: return false
 
+        // اول notification را متوقف می‌کنیم
+        NotificationManager.stopSpeedNotification(currentConfig)
+
+        // سپس core را به صورت blocking متوقف می‌کنیم
         if (coreController.isRunning) {
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    coreController.stopLoop()
-                } catch (e: Exception) {
-                    Log.e(AppConfig.TAG, "Failed to stop V2Ray loop", e)
+            try {
+                // استفاده از runBlocking برای اطمینان از توقف کامل قبل از ادامه
+                runBlocking(Dispatchers.IO) {
+                    try {
+                        coreController.stopLoop()
+                        // صبر کوتاه برای اطمینان از توقف کامل
+                        kotlinx.coroutines.delay(100)
+                    } catch (e: Exception) {
+                        Log.e(AppConfig.TAG, "Failed to stop V2Ray loop", e)
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(AppConfig.TAG, "Failed to stop core in blocking mode", e)
             }
         }
 
+        // حالا پیام موفقیت را ارسال می‌کنیم
         MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
-        NotificationManager.cancelNotification()
 
+        // سپس plugin را متوقف می‌کنیم
+        try {
+            PluginServiceManager.stopPlugin()
+        } catch (e: Exception) {
+            Log.e(AppConfig.TAG, "Failed to stop plugin", e)
+        }
+
+        // broadcast receiver را unregister می‌کنیم
         try {
             service.unregisterReceiver(mMsgReceive)
         } catch (e: Exception) {
             Log.e(AppConfig.TAG, "Failed to unregister broadcast receiver", e)
         }
-        PluginServiceManager.stopPlugin()
+
+        // در نهایت notification را کامل cancel می‌کنیم
+        NotificationManager.cancelNotification()
 
         return true
     }
