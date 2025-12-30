@@ -73,30 +73,30 @@ class V2RayVpnService : VpnService(), ServiceControl {
         val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
         StrictMode.setThreadPolicy(policy)
         V2RayServiceManager.serviceControl = SoftReference(this)
+        Log.i(AppConfig.TAG, "V2RayVpnService created")
     }
 
     override fun onRevoke() {
-        stopV2Ray()
+        Log.i(AppConfig.TAG, "VPN permission revoked")
+        stopV2Ray(true)
     }
 
-//    override fun onLowMemory() {
-//        stopV2Ray()
-//        super.onLowMemory()
-//    }
-
     override fun onDestroy() {
-        super.onDestroy()
+        Log.i(AppConfig.TAG, "V2RayVpnService destroying")
         // اطمینان از توقف کامل قبل از destroy
         stopV2Ray(true)
         NotificationManager.cancelNotification()
+        V2RayServiceManager.serviceControl = null // پاکسازی reference
+        super.onDestroy()
+        Log.i(AppConfig.TAG, "V2RayVpnService destroyed")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.i(AppConfig.TAG, "V2RayVpnService onStartCommand")
         if (V2RayServiceManager.startCoreLoop()) {
             startService()
         }
         return START_STICKY
-        //return super.onStartCommand(intent, flags, startId)
     }
 
     override fun getService(): Service {
@@ -130,6 +130,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
     private fun setupService() {
         val prepare = prepare(this)
         if (prepare != null) {
+            Log.e(AppConfig.TAG, "VPN preparation failed: $prepare")
             return
         }
 
@@ -155,7 +156,9 @@ class V2RayVpnService : VpnService(), ServiceControl {
 
         // Close the old interface since the parameters have been changed
         try {
-            mInterface.close()
+            if (::mInterface.isInitialized) {
+                mInterface.close()
+            }
         } catch (ignored: Exception) {
             // ignored
         }
@@ -167,6 +170,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
         try {
             mInterface = builder.establish()!!
             isRunning = true
+            Log.i(AppConfig.TAG, "VPN interface established successfully")
             return true
         } catch (e: Exception) {
             Log.e(AppConfig.TAG, "Failed to establish VPN interface", e)
@@ -211,9 +215,6 @@ class V2RayVpnService : VpnService(), ServiceControl {
         }
 
         // Configure DNS servers
-        //if (MmkvManager.decodeSettingsBool(AppConfig.PREF_LOCAL_DNS_ENABLED) == true) {
-        //  builder.addDnsServer(PRIVATE_VLAN4_ROUTER)
-        //} else {
         SettingsManager.getVpnDnsServers().forEach {
             if (Utils.isPureIpAddress(it)) {
                 builder.addDnsServer(it)
@@ -297,6 +298,8 @@ class V2RayVpnService : VpnService(), ServiceControl {
      * Starts the tun2socks process with the appropriate parameters.
      */
     private fun runTun2socks() {
+        if (!isRunning) return
+        
         if (MmkvManager.decodeSettingsBool(AppConfig.PREF_USE_HEV_TUNNEL, true) == true) {
             tun2SocksService = TProxyService(
                 context = applicationContext,
@@ -321,14 +324,9 @@ class V2RayVpnService : VpnService(), ServiceControl {
      * @param isForced Whether to force stop the service.
      */
     private fun stopV2Ray(isForced: Boolean = true) {
-//        val configName = defaultDPreference.getPrefString(PREF_CURR_CONFIG_GUID, "")
-//        val emptyInfo = VpnNetworkInfo()
-//        val info = loadVpnNetworkInfo(configName, emptyInfo)!! + (lastNetworkInfo ?: emptyInfo)
-//        saveVpnNetworkInfo(configName, info)
-        
         Log.i(AppConfig.TAG, "Stopping V2Ray VPN Service (forced: $isForced)")
         
-        // اول isRunning را false می‌کنیم
+        // تغییر وضعیت isRunning به false برای جلوگیری از عملیات‌های جدید
         isRunning = false
         
         // توقف network callback
@@ -336,7 +334,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
             try {
                 connectivity.unregisterNetworkCallback(defaultNetworkCallback)
             } catch (ignored: Exception) {
-                Log.e(AppConfig.TAG, "Failed to unregister network callback", ignored)
+                Log.d(AppConfig.TAG, "Network callback already unregistered")
             }
         }
 
@@ -358,7 +356,10 @@ class V2RayVpnService : VpnService(), ServiceControl {
         if (isForced) {
             // بستن interface
             try {
-                mInterface.close()
+                if (::mInterface.isInitialized) {
+                    mInterface.close()
+                    Log.i(AppConfig.TAG, "VPN interface closed")
+                }
             } catch (e: Exception) {
                 Log.e(AppConfig.TAG, "Failed to close VPN interface", e)
             }
@@ -366,6 +367,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
             // توقف سرویس
             try {
                 stopSelf()
+                Log.i(AppConfig.TAG, "Service stopped via stopSelf()")
             } catch (e: Exception) {
                 Log.e(AppConfig.TAG, "Failed to stop self", e)
             }
