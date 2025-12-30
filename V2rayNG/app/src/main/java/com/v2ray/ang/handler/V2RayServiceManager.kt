@@ -47,17 +47,10 @@ object V2RayServiceManager {
         return true
     }
 
-    fun startVService(context: Context, guid: String? = null) {
-        if (guid != null) MmkvManager.setSelectServer(guid)
-        startContextService(context)
-    }
-
     fun stopVService(context: Context) {
         context.toast(R.string.toast_services_stop)
         MessageUtil.sendMsg2Service(context, AppConfig.MSG_STATE_STOP, "")
     }
-
-    fun isRunning() = coreController.isRunning
 
     private fun startContextService(context: Context) {
         if (coreController.isRunning) return
@@ -137,7 +130,12 @@ object V2RayServiceManager {
                 AppConfig.MSG_STATE_RESTART -> {
                     serviceControl.stopService()
                     Thread.sleep(500L)
-                    startVService(serviceControl.getService())
+                    val intentStart = if ((MmkvManager.decodeSettingsString(AppConfig.PREF_MODE) ?: AppConfig.VPN) == AppConfig.VPN) {
+                        Intent(serviceControl.getService(), V2RayVpnService::class.java)
+                    } else {
+                        Intent(serviceControl.getService(), V2RayProxyOnlyService::class.java)
+                    }
+                    serviceControl.getService().startService(intentStart)
                 }
             }
             when (intent?.action) {
