@@ -347,7 +347,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
 
         // توقف سرویس
         if (isForced) {
-            stopSelf()
+            this.stopSelf() // استفاده از this.stopSelf() به جای stopSelf()
         }
         
         // حذف نوتیفیکیشن نهایی برای اطمینان
