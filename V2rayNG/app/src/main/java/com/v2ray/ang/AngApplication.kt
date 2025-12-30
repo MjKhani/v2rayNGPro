@@ -29,16 +29,12 @@ class AngApplication : MultiDexApplication() {
 
     override fun onCreate() {
         super.onCreate()
-
         MMKV.initialize(this)
         SettingsManager.setNightMode()
-        
         try {
             WorkManager.initialize(this, workManagerConfiguration)
         } catch (e: Exception) {}
-
         SettingsManager.initRoutingRulesets(this)
-
         es.dmoral.toasty.Toasty.Config.getInstance()
             .setGravity(android.view.Gravity.BOTTOM, 0, 200)
             .apply()
@@ -48,18 +44,15 @@ class AngApplication : MultiDexApplication() {
 
     private fun setupAutoUpdateTask() {
         CoroutineScope(Dispatchers.Main).launch {
-            delay(5000) 
-            
-            // استفاده از رشته مستقیم برای جلوگیری از هرگونه خطای Unresolved Reference
-            val isAutoUpdateEnabled = MmkvManager.decodeSettingsBool("pref_sub_auto_update", true)
+            delay(5000)
+            val isAutoUpdateEnabled = MmkvManager.decodeSettingsBool(AppConfig.PREF_SUB_AUTO_UPDATE, true)
             if (isAutoUpdateEnabled) {
-                val intervalStr = MmkvManager.decodeSettingsString("pref_sub_update_interval")
+                val intervalStr = MmkvManager.decodeSettingsString(AppConfig.PREF_SUB_UPDATE_INTERVAL)
                 val intervalMinutes = try {
                     intervalStr?.toLong() ?: 60L
                 } catch (e: Exception) {
                     60L
                 }
-                
                 if (intervalMinutes >= 15) {
                     try {
                         val updateRequest = androidx.work.PeriodicWorkRequest.Builder(
@@ -71,13 +64,11 @@ class AngApplication : MultiDexApplication() {
                             .build()
 
                         WorkManager.getInstance(this@AngApplication).enqueueUniquePeriodicWork(
-                            "subscription_update_task",
+                            AppConfig.SUBSCRIPTION_UPDATE_TASK_NAME,
                             androidx.work.ExistingPeriodicWorkPolicy.KEEP,
                             updateRequest
                         )
-                    } catch (e: Exception) {
-                        android.util.Log.e("v2rayNG", "AutoUpdate Task Error", e)
-                    }
+                    } catch (e: Exception) {}
                 }
             }
         }
