@@ -42,8 +42,9 @@ object AppConfig {
     const val PREF_FRAGMENT_PACKETS = "pref_fragment_packets"
     const val PREF_FRAGMENT_LENGTH = "pref_fragment_length"
     const val PREF_FRAGMENT_INTERVAL = "pref_fragment_interval"
+    const val PREF_UI_MODE_NIGHT = "pref_ui_mode_night"
 
-    // Subscription Auto-Update constants
+    // Subscription Auto-Update
     const val PREF_SUB_AUTO_UPDATE = "pref_sub_auto_update"
     const val PREF_SUB_UPDATE_INTERVAL = "pref_sub_update_interval"
     const val SUBSCRIPTION_UPDATE_TASK_NAME = "subscription_update_task"
