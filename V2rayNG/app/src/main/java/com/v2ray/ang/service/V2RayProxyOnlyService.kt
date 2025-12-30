@@ -31,6 +31,7 @@ class V2RayProxyOnlyService : Service(), ServiceControl {
      * @return The start mode.
      */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.i(AppConfig.TAG, "V2RayProxyOnlyService onStartCommand")
         V2RayServiceManager.startCoreLoop()
         return START_STICKY
     }
@@ -46,6 +47,7 @@ class V2RayProxyOnlyService : Service(), ServiceControl {
         } catch (e: Exception) {
             Log.e(AppConfig.TAG, "Failed to stop core loop in onDestroy", e)
         }
+        V2RayServiceManager.serviceControl = null // پاکسازی reference
         super.onDestroy()
         Log.i(AppConfig.TAG, "V2RayProxyOnlyService destroyed")
     }
