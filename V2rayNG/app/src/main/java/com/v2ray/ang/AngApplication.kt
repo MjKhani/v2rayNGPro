@@ -32,24 +32,28 @@ class AngApplication : MultiDexApplication() {
 
         MMKV.initialize(this)
         SettingsManager.setNightMode()
-        WorkManager.initialize(this, workManagerConfiguration)
+        
+        try {
+            WorkManager.initialize(this, workManagerConfiguration)
+        } catch (e: Exception) {}
+
         SettingsManager.initRoutingRulesets(this)
 
         es.dmoral.toasty.Toasty.Config.getInstance()
             .setGravity(android.view.Gravity.BOTTOM, 0, 200)
             .apply()
 
-        // تنظیم خودکار آپدیت ساب‌سکریپشن در شروع برنامه
         setupAutoUpdateTask()
     }
 
     private fun setupAutoUpdateTask() {
         CoroutineScope(Dispatchers.Main).launch {
-            delay(5000) // صبر برای پایداری سیستم
+            delay(5000) 
             
-            val isAutoUpdateEnabled = MmkvManager.decodeSettingsBool(AppConfig.PREF_SUB_AUTO_UPDATE, true)
+            // استفاده از رشته مستقیم برای جلوگیری از هرگونه خطای Unresolved Reference
+            val isAutoUpdateEnabled = MmkvManager.decodeSettingsBool("pref_sub_auto_update", true)
             if (isAutoUpdateEnabled) {
-                val intervalStr = MmkvManager.decodeSettingsString(AppConfig.PREF_SUB_UPDATE_INTERVAL)
+                val intervalStr = MmkvManager.decodeSettingsString("pref_sub_update_interval")
                 val intervalMinutes = try {
                     intervalStr?.toLong() ?: 60L
                 } catch (e: Exception) {
@@ -57,20 +61,23 @@ class AngApplication : MultiDexApplication() {
                 }
                 
                 if (intervalMinutes >= 15) {
-                    val rw = WorkManager.getInstance(this@AngApplication)
-                    val updateRequest = androidx.work.PeriodicWorkRequest.Builder(
-                        com.v2ray.ang.handler.SubscriptionUpdater.UpdateTask::class.java,
-                        intervalMinutes,
-                        java.util.concurrent.TimeUnit.MINUTES
-                    )
-                        .setInitialDelay(intervalMinutes, java.util.concurrent.TimeUnit.MINUTES)
-                        .build()
+                    try {
+                        val updateRequest = androidx.work.PeriodicWorkRequest.Builder(
+                            com.v2ray.ang.handler.SubscriptionUpdater.UpdateTask::class.java,
+                            intervalMinutes,
+                            java.util.concurrent.TimeUnit.MINUTES
+                        )
+                            .setInitialDelay(intervalMinutes, java.util.concurrent.TimeUnit.MINUTES)
+                            .build()
 
-                    rw.enqueueUniquePeriodicWork(
-                        AppConfig.SUBSCRIPTION_UPDATE_TASK_NAME,
-                        androidx.work.ExistingPeriodicWorkPolicy.KEEP,
-                        updateRequest
-                    )
+                        WorkManager.getInstance(this@AngApplication).enqueueUniquePeriodicWork(
+                            "subscription_update_task",
+                            androidx.work.ExistingPeriodicWorkPolicy.KEEP,
+                            updateRequest
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("v2rayNG", "AutoUpdate Task Error", e)
+                    }
                 }
             }
         }
