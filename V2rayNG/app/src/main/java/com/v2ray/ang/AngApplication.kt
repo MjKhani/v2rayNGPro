@@ -33,7 +33,9 @@ class AngApplication : MultiDexApplication() {
         SettingsManager.setNightMode()
         try {
             WorkManager.initialize(this, workManagerConfiguration)
-        } catch (e: Exception) {}
+        } catch (e: Exception) {
+            // Already initialized
+        }
         SettingsManager.initRoutingRulesets(this)
         es.dmoral.toasty.Toasty.Config.getInstance()
             .setGravity(android.view.Gravity.BOTTOM, 0, 200)
@@ -49,10 +51,11 @@ class AngApplication : MultiDexApplication() {
             if (isAutoUpdateEnabled) {
                 val intervalStr = MmkvManager.decodeSettingsString(AppConfig.PREF_SUB_UPDATE_INTERVAL)
                 val intervalMinutes = try {
-                    intervalStr?.toLong() ?: 60L
+                    intervalStr?.toLong() ?: AppConfig.SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL.toLong()
                 } catch (e: Exception) {
-                    60L
+                    AppConfig.SUBSCRIPTION_DEFAULT_UPDATE_INTERVAL.toLong()
                 }
+                
                 if (intervalMinutes >= 15) {
                     try {
                         val updateRequest = androidx.work.PeriodicWorkRequest.Builder(
@@ -68,7 +71,9 @@ class AngApplication : MultiDexApplication() {
                             androidx.work.ExistingPeriodicWorkPolicy.KEEP,
                             updateRequest
                         )
-                    } catch (e: Exception) {}
+                    } catch (e: Exception) {
+                        android.util.Log.e(AppConfig.TAG, "AutoUpdate Error", e)
+                    }
                 }
             }
         }
