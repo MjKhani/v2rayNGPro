@@ -11,6 +11,8 @@ import android.net.NetworkRequest
 import android.net.ProxyInfo
 import android.net.VpnService
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.os.StrictMode
 import android.util.Log
@@ -27,9 +29,14 @@ import com.v2ray.ang.util.Utils
 import java.lang.ref.SoftReference
 
 class V2RayVpnService : VpnService(), ServiceControl {
-    private lateinit var mInterface: ParcelFileDescriptor
+    private var mInterface: ParcelFileDescriptor? = null
+    
     @Volatile
     private var isRunning = false
+    
+    @Volatile
+    private var isStopping = false
+    
     private var tun2SocksService: Tun2SocksControl? = null
 
     /**destroy
@@ -74,11 +81,11 @@ class V2RayVpnService : VpnService(), ServiceControl {
         val policy = StrictMode.ThreadPolicy.Builder().permitAll().build()
         StrictMode.setThreadPolicy(policy)
         V2RayServiceManager.serviceControl = SoftReference(this)
-        Log.i(AppConfig.TAG, "V2RayVpnService created")
+        Log.i(AppConfig.TAG, "V2RayVpnService onCreate")
     }
 
     override fun onRevoke() {
-        Log.w(AppConfig.TAG, "VPN permission revoked")
+        Log.w(AppConfig.TAG, "VPN permission revoked by system")
         stopV2Ray()
     }
 
@@ -88,24 +95,27 @@ class V2RayVpnService : VpnService(), ServiceControl {
 //    }
 
     override fun onDestroy() {
-        Log.i(AppConfig.TAG, "V2RayVpnService onDestroy called")
+        Log.i(AppConfig.TAG, "V2RayVpnService onDestroy START")
         
-        // اطمینان از توقف کامل تمام منابع
+        // Force complete cleanup
         try {
             stopV2Ray(true)
         } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Error in onDestroy stopV2Ray", e)
+            Log.e(AppConfig.TAG, "Error during forced stop in onDestroy", e)
         }
         
-        // پاکسازی notification
+        // Double check notification is cancelled
         try {
             NotificationManager.cancelNotification()
         } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Error canceling notification in onDestroy", e)
+            Log.e(AppConfig.TAG, "Error canceling notification", e)
         }
         
+        // Clear service reference
+        V2RayServiceManager.serviceControl = null
+        
         super.onDestroy()
-        Log.i(AppConfig.TAG, "V2RayVpnService destroyed")
+        Log.i(AppConfig.TAG, "V2RayVpnService onDestroy COMPLETE")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -172,9 +182,7 @@ class V2RayVpnService : VpnService(), ServiceControl {
 
         // Close the old interface since the parameters have been changed
         try {
-            if (::mInterface.isInitialized) {
-                mInterface.close()
-            }
+            mInterface?.close()
         } catch (ignored: Exception) {
             // ignored
         }
@@ -184,7 +192,11 @@ class V2RayVpnService : VpnService(), ServiceControl {
 
         // Create a new interface using the builder and save the parameters
         try {
-            mInterface = builder.establish()!!
+            mInterface = builder.establish()
+            if (mInterface == null) {
+                Log.e(AppConfig.TAG, "Failed to establish VPN interface - builder.establish() returned null")
+                return false
+            }
             isRunning = true
             return true
         } catch (e: Exception) {
@@ -316,17 +328,23 @@ class V2RayVpnService : VpnService(), ServiceControl {
      * Starts the tun2socks process with the appropriate parameters.
      */
     private fun runTun2socks() {
+        val vpnInterface = mInterface
+        if (vpnInterface == null) {
+            Log.e(AppConfig.TAG, "Cannot start tun2socks: VPN interface is null")
+            return
+        }
+        
         if (MmkvManager.decodeSettingsBool(AppConfig.PREF_USE_HEV_TUNNEL, true) == true) {
             tun2SocksService = TProxyService(
                 context = applicationContext,
-                vpnInterface = mInterface,
+                vpnInterface = vpnInterface,
                 isRunningProvider = { isRunning },
                 restartCallback = { runTun2socks() }
             )
         } else {
             tun2SocksService = Tun2SocksService(
                 context = applicationContext,
-                vpnInterface = mInterface,
+                vpnInterface = vpnInterface,
                 isRunningProvider = { isRunning },
                 restartCallback = { runTun2socks() }
             )
@@ -336,67 +354,107 @@ class V2RayVpnService : VpnService(), ServiceControl {
     }
 
     /**
-     * Stops the V2Ray service.
-     * @param isForced Whether to force stop the service.
+     * Stops the V2Ray VPN service completely with proper cleanup order.
      */
     private fun stopV2Ray(isForced: Boolean = true) {
-        // جلوگیری از فراخوانی همزمان
+        // Prevent concurrent stop attempts
         synchronized(this) {
-            if (!isRunning && !::mInterface.isInitialized) {
+            if (isStopping) {
+                Log.w(AppConfig.TAG, "Stop already in progress")
+                return
+            }
+            
+            if (!isRunning && mInterface == null) {
                 Log.d(AppConfig.TAG, "Service already stopped")
                 return
             }
-        }
-        
-        Log.i(AppConfig.TAG, "Stopping V2Ray VPN Service (forced: $isForced)")
-        
-        // 1. تغییر isRunning به false برای جلوگیری از عملیات‌های جدید
-        isRunning = false
-        
-        // 2. توقف network callback
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try {
-                connectivity.unregisterNetworkCallback(defaultNetworkCallback)
-            } catch (ignored: Exception) {
-                Log.d(AppConfig.TAG, "Network callback already unregistered")
-            }
-        }
-
-        // 3. توقف tun2socks
-        try {
-            tun2SocksService?.stopTun2Socks()
-            tun2SocksService = null
-        } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Failed to stop tun2socks", e)
-        }
-
-        // 4. توقف core loop - BLOCKING
-        try {
-            V2RayServiceManager.stopCoreLoop()
-            // صبر کوتاه برای اطمینان از توقف کامل
-            Thread.sleep(100)
-        } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Failed to stop core loop", e)
-        }
-
-        // 5. بستن VPN interface
-        if (isForced) {
-            try {
-                if (::mInterface.isInitialized) {
-                    mInterface.close()
-                }
-            } catch (e: Exception) {
-                Log.e(AppConfig.TAG, "Failed to close VPN interface", e)
-            }
             
-            // 6. در نهایت stopSelf
-            try {
-                stopSelf()
-            } catch (e: Exception) {
-                Log.e(AppConfig.TAG, "Failed to stop self", e)
-            }
+            isStopping = true
         }
-        
-        Log.i(AppConfig.TAG, "V2Ray VPN Service stopped successfully")
+
+        Log.i(AppConfig.TAG, "=== Stopping V2Ray VPN Service (forced=$isForced) ===")
+
+        try {
+            // Step 1: Mark as not running to prevent new operations
+            isRunning = false
+            Log.d(AppConfig.TAG, "1. Marked as not running")
+
+            // Step 2: Unregister network callback
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                try {
+                    connectivity.unregisterNetworkCallback(defaultNetworkCallback)
+                    Log.d(AppConfig.TAG, "2. Network callback unregistered")
+                } catch (e: Exception) {
+                    Log.d(AppConfig.TAG, "2. Network callback already unregistered")
+                }
+            }
+
+            // Step 3: Stop tun2socks
+            try {
+                tun2SocksService?.stopTun2Socks()
+                tun2SocksService = null
+                Log.d(AppConfig.TAG, "3. Tun2socks stopped")
+            } catch (e: Exception) {
+                Log.e(AppConfig.TAG, "3. Failed to stop tun2socks", e)
+            }
+
+            // Step 4: Stop core loop (blocking)
+            try {
+                V2RayServiceManager.stopCoreLoop()
+                Thread.sleep(150) // Give it time to complete
+                Log.d(AppConfig.TAG, "4. Core loop stopped")
+            } catch (e: Exception) {
+                Log.e(AppConfig.TAG, "4. Failed to stop core loop", e)
+            }
+
+            // Step 5: Close VPN interface
+            if (isForced) {
+                try {
+                    mInterface?.close()
+                    mInterface = null
+                    Log.d(AppConfig.TAG, "5. VPN interface closed")
+                } catch (e: Exception) {
+                    Log.e(AppConfig.TAG, "5. Failed to close VPN interface", e)
+                }
+
+                // Step 6: Stop foreground and cancel notification
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        stopForeground(true)
+                    }
+                    Log.d(AppConfig.TAG, "6. Foreground service stopped")
+                } catch (e: Exception) {
+                    Log.e(AppConfig.TAG, "6. Failed to stop foreground", e)
+                }
+
+                // Step 7: Cancel notification with delay
+                Handler(Looper.getMainLooper()).postDelayed({
+                    try {
+                        NotificationManager.cancelNotification()
+                        Log.d(AppConfig.TAG, "7. Notification cancelled (delayed)")
+                    } catch (e: Exception) {
+                        Log.e(AppConfig.TAG, "7. Failed to cancel notification", e)
+                    }
+                }, 200)
+
+                // Step 8: Stop self service
+                Handler(Looper.getMainLooper()).postDelayed({
+                    try {
+                        stopSelf()
+                        Log.d(AppConfig.TAG, "8. Service stopped via stopSelf()")
+                    } catch (e: Exception) {
+                        Log.e(AppConfig.TAG, "8. Failed to stopSelf", e)
+                    }
+                }, 250)
+            }
+
+            Log.i(AppConfig.TAG, "=== V2Ray VPN Service stop completed ===")
+
+        } finally {
+            isStopping = false
+        }
     }
 }
