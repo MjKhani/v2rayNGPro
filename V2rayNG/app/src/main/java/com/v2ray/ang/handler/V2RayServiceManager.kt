@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.v2ray.ang.AppConfig
@@ -27,6 +29,8 @@ import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
 import libv2ray.Libv2ray
 import java.lang.ref.SoftReference
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 object V2RayServiceManager {
 
@@ -34,9 +38,8 @@ object V2RayServiceManager {
     private val mMsgReceive = ReceiveMessageHandler()
     private var currentConfig: ProfileItem? = null
     
-    // flag برای جلوگیری از race condition
     @Volatile
-    private var isStopping = false
+    private var isStoppingCore = false
 
     var serviceControl: SoftReference<ServiceControl>? = null
         set(value) {
@@ -186,93 +189,110 @@ object V2RayServiceManager {
     }
 
     /**
-     * Stops the V2Ray core service.
-     * Unregisters broadcast receivers, stops notifications, and shuts down plugins.
-     * @return True if the core was stopped successfully, false otherwise.
+     * Stops the V2Ray core service completely and synchronously.
+     * This ensures all resources are cleaned up before returning.
      */
     fun stopCoreLoop(): Boolean {
-        // جلوگیری از فراخوانی همزمان
+        // جلوگیری از multiple simultaneous stops
         synchronized(this) {
-            if (isStopping) {
-                Log.w(AppConfig.TAG, "Stop already in progress, skipping")
+            if (isStoppingCore) {
+                Log.w(AppConfig.TAG, "Core stop already in progress")
                 return false
             }
-            isStopping = true
+            isStoppingCore = true
         }
 
-        val service = getService()
-        if (service == null) {
-            isStopping = false
-            return false
-        }
-
-        Log.i(AppConfig.TAG, "Stopping V2Ray core loop...")
-
-        // 1. اول notification speed را متوقف می‌کنیم
         try {
-            NotificationManager.stopSpeedNotification(currentConfig)
-        } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Failed to stop speed notification", e)
-        }
-
-        // 2. توقف plugin
-        try {
-            PluginServiceManager.stopPlugin()
-        } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Failed to stop plugin", e)
-        }
-
-        // 3. توقف core loop به صورت BLOCKING و SYNCHRONOUS
-        if (coreController.isRunning) {
-            try {
-                Log.i(AppConfig.TAG, "Stopping core controller...")
-                // توقف مستقیم و synchronous
-                coreController.stopLoop()
-                
-                // صبر برای اطمینان از توقف کامل
-                var attempts = 0
-                while (coreController.isRunning && attempts < 20) {
-                    Thread.sleep(50)
-                    attempts++
-                }
-                
-                if (coreController.isRunning) {
-                    Log.w(AppConfig.TAG, "Core controller still running after stop attempts")
-                } else {
-                    Log.i(AppConfig.TAG, "Core controller stopped successfully")
-                }
-            } catch (e: Exception) {
-                Log.e(AppConfig.TAG, "Failed to stop V2Ray loop", e)
+            val service = getService()
+            if (service == null) {
+                Log.w(AppConfig.TAG, "Service is null, cannot stop core")
+                return false
             }
-        }
 
-        // 4. unregister broadcast receiver
-        try {
-            service.unregisterReceiver(mMsgReceive)
-        } catch (e: Exception) {
-            // ممکن است receiver قبلاً unregister شده باشد
-            Log.d(AppConfig.TAG, "Receiver already unregistered: ${e.message}")
-        }
+            Log.i(AppConfig.TAG, "=== Starting complete core shutdown ===")
 
-        // 5. ارسال پیام توقف موفقیت‌آمیز
-        try {
-            MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
-        } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Failed to send stop success message", e)
-        }
+            // Step 1: Stop speed notification immediately
+            try {
+                NotificationManager.stopSpeedNotification(currentConfig)
+                Log.d(AppConfig.TAG, "✓ Speed notification stopped")
+            } catch (e: Exception) {
+                Log.e(AppConfig.TAG, "Failed to stop speed notification", e)
+            }
 
-        // 6. در نهایت notification را cancel می‌کنیم
-        try {
-            NotificationManager.cancelNotification()
-        } catch (e: Exception) {
-            Log.e(AppConfig.TAG, "Failed to cancel notification", e)
-        }
+            // Step 2: Stop plugin
+            try {
+                PluginServiceManager.stopPlugin()
+                Log.d(AppConfig.TAG, "✓ Plugin stopped")
+            } catch (e: Exception) {
+                Log.e(AppConfig.TAG, "Failed to stop plugin", e)
+            }
 
-        Log.i(AppConfig.TAG, "V2Ray core loop stopped successfully")
-        
-        // reset flag
-        isStopping = false
-        return true
+            // Step 3: Stop core loop with timeout
+            if (coreController.isRunning) {
+                Log.i(AppConfig.TAG, "Stopping core controller...")
+                val latch = CountDownLatch(1)
+                
+                Thread {
+                    try {
+                        coreController.stopLoop()
+                        latch.countDown()
+                    } catch (e: Exception) {
+                        Log.e(AppConfig.TAG, "Exception stopping core", e)
+                        latch.countDown()
+                    }
+                }.start()
+
+                // Wait for core to stop (max 2 seconds)
+                if (!latch.await(2, TimeUnit.SECONDS)) {
+                    Log.w(AppConfig.TAG, "Core stop timeout after 2 seconds")
+                }
+
+                // Verify core stopped
+                var retries = 0
+                while (coreController.isRunning && retries < 10) {
+                    Thread.sleep(50)
+                    retries++
+                }
+
+                if (coreController.isRunning) {
+                    Log.e(AppConfig.TAG, "✗ Core still running after stop attempts!")
+                } else {
+                    Log.d(AppConfig.TAG, "✓ Core controller stopped")
+                }
+            }
+
+            // Step 4: Unregister broadcast receiver
+            try {
+                service.unregisterReceiver(mMsgReceive)
+                Log.d(AppConfig.TAG, "✓ Broadcast receiver unregistered")
+            } catch (e: Exception) {
+                Log.d(AppConfig.TAG, "Receiver already unregistered or not found")
+            }
+
+            // Step 5: Send stop success message
+            try {
+                MessageUtil.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
+                Log.d(AppConfig.TAG, "✓ Stop success message sent")
+            } catch (e: Exception) {
+                Log.e(AppConfig.TAG, "Failed to send stop message", e)
+            }
+
+            // Step 6: Cancel notification (delayed to ensure UI update)
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    NotificationManager.cancelNotification()
+                    Log.d(AppConfig.TAG, "✓ Notification cancelled")
+                } catch (e: Exception) {
+                    Log.e(AppConfig.TAG, "Failed to cancel notification", e)
+                }
+            }, 100)
+
+            Log.i(AppConfig.TAG, "=== Core shutdown completed ===")
+            return true
+
+        } finally {
+            isStoppingCore = false
+        }
     }
 
     /**
